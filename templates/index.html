@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>To-Do List</title>
+</head>
+<body>
+    <h1>My To-Do List</h1>
+    <a href="/uncompleted">Show Uncompleted Tasks Only</a>
+    <a href="/">Show All Tasks</a>
+    <form action="/add" method="post">
+        <input type="text" name="task" placeholder="Enter a task" required>
+        <button type="submit">Add Task</button>
+    </form>
+
+    <ul>
+        {% for task in tasks %}
+            <li>{{ task.title }} [Completed: {{'Yes' if task.completed else 'No'}}]
+                <a href="/delete/{{ task.id }}">❌</a>
+                <a href="/complete/{{ task.id }}">✅</a>
+            </li>
+        {% endfor %}
+    </ul>
+
+</body>
+</html>
