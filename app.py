@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 import os
 
@@ -47,6 +47,17 @@ def complete_task(task_id):
 def show_uncompleted():
     uncompleted_tasks = Task.query.filter_by(completed=False).all()  
     return render_template('index.html', tasks=uncompleted_tasks)
+
+@app.route('/edit/<int:task_id>', methods=['GET', 'POST'])
+def edit_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    
+    if request.method == 'POST':
+        task.title = request.form['task']  # Update the task title
+        db.session.commit()
+        return redirect('/')
+    
+    return render_template('edit.html', task=task)
 
 if __name__ == '__main__':
     with app.app_context():
