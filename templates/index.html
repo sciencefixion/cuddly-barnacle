@@ -1,33 +1,42 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>To-Do List</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-
 <body>
     <h1>My To-Do List</h1>
-    <a href="/uncompleted">Show Uncompleted Tasks Only</a>
-    <a href="/">Show All Tasks</a>
+    <div class="nav-links">
+        <a href="/uncompleted">Show Uncompleted Tasks Only</a>
+        <a href="/">Show All Tasks</a>
+    </div>
 
-    <div>
-        <p>Total Tasks: {{ tasks|length }} | Completed: {{ tasks|selectattr('completed')|list|length }}</p>
+    <div class="task-stats">
+        Total Tasks: {{ tasks|length }} |
+        Completed: {{ tasks|selectattr('completed')|list|length }} |
+        Remaining: {{ tasks|rejectattr('completed')|list|length }}
     </div>
 
     <form action="/add" method="post">
-        <input type="text" name="task" placeholder="Enter a task" required>
+        <input type="text" name="task" placeholder="Enter a new task" required>
         <button type="submit">Add Task</button>
     </form>
 
     <ul>
         {% for task in tasks %}
-        <li>{{ task.title }} [Completed: {{'Yes' if task.completed else 'No'}}]
-            <a href="/delete/{{ task.id }}">❌</a>
-            <a href="/complete/{{ task.id }}">✅</a>
+        <li>
+            <div class="task-info">
+                {{ task.title }}
+                <span class="completed-{{ 'yes' if task.completed else 'no' }}">
+                    [{{ 'Completed' if task.completed else 'Pending' }}]
+                </span>
+            </div>
+            <div class="task-actions">
+                <a href="/complete/{{ task.id }}" title="Mark as complete">✅</a>
+                <a href="/delete/{{ task.id }}" title="Delete task">❌</a>
+            </div>
         </li>
         {% endfor %}
     </ul>
-
 </body>
-
 </html>
