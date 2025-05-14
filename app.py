@@ -5,8 +5,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import json
 import boto3
+import logging
+
+# Set up basic logging for error reporting
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
+
 
 def get_db_secret(secret_name, region_name='us-east-2'):
     client = boto3.client('secretsmanager', region_name=region_name)
@@ -22,8 +27,20 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{secret['username']}:{
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+BUCKET_NAME = 'flask-todo-april-bucket2'
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+# AWS S3 Configuration
+def upload_file_to_s3(file_path, bucket_name):
+    s3 = boto3.client("s3")
+    file_name = os.path.basename(file_path)
+    try:
+        s3.upload_file(file_path, bucket_name, file_name)
+        logging.info(f"Uploaded {file_name} to {bucket_name}")
+    except Exception as e:
+        logging.error("Error uploading file: %s", e)
+
 
 # Models
 class User(UserMixin, db.Model):
@@ -94,6 +111,12 @@ def home():
 @login_required
 def add_task():
     task_title = request.form.get('task')
+    file = request.files.get('file')
+    if file:
+        file_path = os.path.join('uploads', file.filename)
+        file.save(file_path)
+        upload_file_to_s3(file_path, BUCKET_NAME)
+        os.remove(file_path)
     if task_title:
         new_task = Task(title=task_title, user_id=current_user.id)
         db.session.add(new_task)
