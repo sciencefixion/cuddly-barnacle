@@ -3,11 +3,22 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import json
+import boto3
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-change-this-in-production'
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'database.db')
+
+def get_db_secret(secret_name, region_name='us-east-2'):
+    client = boto3.client('secretsmanager', region_name=region_name)
+    get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+
+    secret = get_secret_value_response['SecretString']
+    return json.loads(secret)
+
+# Fetch credentials from Secrets Manager
+secret = get_db_secret('prod/rds/mydb')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{secret['username']}:{secret['password']}@{secret['host']}/{secret['dbname']}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
