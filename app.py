@@ -8,7 +8,8 @@ import boto3
 import logging
 
 # Set up basic logging for error reporting
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(filename= 'app.log',
+                    level=logging.INFO)
 
 app = Flask(__name__)
 
@@ -32,12 +33,13 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 # AWS S3 Configuration
-def upload_file_to_s3(file_path, bucket_name):
+def upload_file_to_s3(file_path, s3_key):
     s3 = boto3.client("s3")
     file_name = os.path.basename(file_path)
     try:
         s3.upload_file(file_path, bucket_name, file_name)
         logging.info(f"Uploaded {file_name} to {bucket_name}")
+        return f"https://{BUCKET_NAME}.s3.amazonaws.com/{s3_key}"
     except Exception as e:
         logging.error("Error uploading file: %s", e)
 
@@ -110,15 +112,24 @@ def home():
 @app.route('/add', methods=['POST'])
 @login_required
 def add_task():
-    task_title = request.form.get('task')
-    file = request.files.get('file')
+    task = request.form.get('task')
+    try:
+        file = request.files.get('file')
+    except Exception as e:
+        logging.error("Error retrieving file: %s", e)
+        file = None
+
+    new_task = Task(title=task, user_id=current_user.id)
     if file:
         file_path = os.path.join('uploads', file.filename)
         file.save(file_path)
-        upload_file_to_s3(file_path, BUCKET_NAME)
+        s3_url = upload_file_to_s3(file_path, BUCKET_NAME)
         os.remove(file_path)
-    if task_title:
-        new_task = Task(title=task_title, user_id=current_user.id)
+        new_task.s3_url = s3_url
+    else:
+        logging.info("No file uploaded")
+    if task:
+        new_task = Task(title=task, user_id=current_user.id)
         db.session.add(new_task)
         db.session.commit()
     return redirect(url_for('home'))
