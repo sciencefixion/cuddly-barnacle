@@ -18,7 +18,7 @@
         Pending: {{ tasks|rejectattr('completed')|list|length }}
     </div>
 
-    <form action="{{ url_for('add_task') }}" method="post">
+    <form action="{{ url_for('add_task') }}" method="post" enctype="multipart/form-data">
         <input type="text" name="task" placeholder="New task" required>
         <input type="file", name="file">
         <button type="submit">Add Task</button>
