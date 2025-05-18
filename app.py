@@ -6,45 +6,107 @@ import os
 import json
 import boto3
 import logging
+from logging.handlers import RotatingFileHandler
 
-# Set up basic logging for error reporting
-logging.basicConfig(filename= 'app.log',
-                    level=logging.INFO)
-
+# Initialize Flask app
 app = Flask(__name__)
 
+# ========== Configuration Settings ==========
+app.config.update(
+    SECRET_KEY=os.eviron.get('FLASK_SECRET_KEY', os.random(24)),
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=86400, # 1 day in seconds
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    SQLALCHEMY_POOL_RECYCLE=3600, Recycle connections every hour
+    SQLALCHEMY_POOL_TIMEOUT=30,
+    SQLALCHEMY_ENGINE_OPTIONS={
+        'pool_pre_ping': True, # Enable connection health checks
+        'pool_recycle': 3600,
+        'pool_size': 20,
+        max_overflow: 10
+    }
+)
+
+# ========== Enhanced Logging Setup ==========
+
+def configure_logging():
+    root = logging.getLogger()
+    if root.handlers:
+        for handler in root.handlers:
+            root.removeHandler(handler)
+
+    # Create logs directory if it doesn't exist
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+
+    #Production logging - rotates when reaches 10MB, keeps 5 backups
+    file_handler = RotatingFileHandler(
+        'logs/app.log',
+        maxBytes=1024*1024*10,
+        backupCount=5,
+        
+    )
+    file.handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Application startup')
+
+configure_logging()
+
+# ========== Database Configuration ==========
 
 def get_db_secret(secret_name, region_name='us-east-2'):
-    client = boto3.client('secretsmanager', region_name=region_name)
-    get_secret_value_response = client.get_secret_value(SecretId=secret_name)
-
-    secret = get_secret_value_response['SecretString']
-    return json.loads(secret)
+    try:
+        client = boto3.client('secretsmanager', region_name=region_name)
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+        secret = get_secret_value_response['SecretString']
+        return json.loads(secret)
+    except Exception as e:
+        app.logger.error(f"Error fetching DB secret: {str(e)}")
+        raise
 
 # Fetch credentials from Secrets Manager
-secret = get_db_secret('prod/rds/mydb')
-
-app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{secret['username']}:{secret['password']}@{secret['host']}/{secret['dbname']}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+try:
+    secret = get_db_secret('prod/rds/mydb')
+    app.config['SQLALCHEMY_DATABASE_URI'] = (
+        f"mysql+pymysql://{secret['username']}:{secret['password']}"
+        f"@{secret['host']}/{secret['dbname']}?charset=utf8mb4"
+    )
+except Exception as e:
+    app.logger.error(f"Failed to configure database: {str(e)}")
+    raise
 
 db = SQLAlchemy(app)
-BUCKET_NAME = 'flask-todo-april-bucket2'
-login_manager = LoginManager(app)
-login_manager.login_view = 'login'
 
-# AWS S3 Configuration
+# ========== AWS S3 Configuration ==========
+BUCKET_NAME = 'flask-todo-april-bucket2'
+
 def upload_file_to_s3(file_path, s3_key):
     s3 = boto3.client("s3")
     file_name = os.path.basename(file_path)
     try:
-        s3.upload_file(file_path, bucket_name, file_name)
-        logging.info(f"Uploaded {file_name} to {bucket_name}")
+        s3.upload_file(
+            file_path, 
+            BUCKET_NAME,
+            s3_key,
+            ExtraArgs={
+                'ACL': 'private',
+                'ContentType': 'application/octet-stream'
+            }
+        )
+        app.logger.info(f"Uploaded {s3_key} to {BUCKET_NAME}")
         return f"https://{BUCKET_NAME}.s3.amazonaws.com/{s3_key}"
     except Exception as e:
-        logging.error("Error uploading file: %s", e)
+        app.logger.error(f"Error uploading file {s3_key}: {str(e)}")
+        raise
 
+# ============ Models =============
 
-# Models
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
@@ -56,12 +118,20 @@ class Task(db.Model):
     title = db.Column(db.String(100), nullable=False)
     completed = db.Column(db.Boolean, default=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    s3_url = db.Column(db.String(500)) #added for file storage
+
+# ========== Flask-Login Configuration ==========
+
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+login_manager.session_protection = "strong" # Enhanced session protection
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Auth Routes
+# =========== Application Routes ==========
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -166,7 +236,15 @@ def edit_task(task_id):
     
     return render_template('edit.html', task=task)
 
+# ========== Application Startup ==========
+
 if __name__ == '__main__':
+    # Create uploads directory if it doesn't exist
+    if not os.path.exists('uploads'):
+        os.makedirs('uploads')
+    # Initialize database
     with app.app_context():
         db.create_all()
+
+    # Run the application
     app.run(host='0.0.0.0', debug=True)
