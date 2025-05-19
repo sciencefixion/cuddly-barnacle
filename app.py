@@ -232,7 +232,7 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/')
+@app.route('/home')
 @login_required
 def home():
     tasks = Task.query.filter_by(user_id=current_user.id).all()
