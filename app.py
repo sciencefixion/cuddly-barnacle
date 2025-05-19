@@ -54,10 +54,12 @@ if not get_flask_secret() and not os.environ.get('FLASK_SECRET_KEY'):
 
 app.config.update(
     # Security settings
-    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(days=1),
+    SESSION_COOKIE_NAME='flask_app_session',  # Explicit name
+    SESSION_REFRESH_EACH_REQUEST=True
     
     # Database settings
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -181,7 +183,10 @@ login_manager.session_protection = "strong"
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    user = User.query.get(int(user_id))
+    if not user:
+        app.logger.error(f"User {user_id} not found!")
+    return user
 
 # ======================
 # Application Routes
@@ -235,6 +240,7 @@ def logout():
 @app.route('/home')
 @login_required
 def home():
+    app.logger.info(f"Home accessed by: {current_user.id}")
     tasks = Task.query.filter_by(user_id=current_user.id).all()
     return render_template('index.html', tasks=tasks)
 
