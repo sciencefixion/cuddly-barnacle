@@ -39,6 +39,7 @@ body {
 }
 
 .auth-container input {
+  min-width: 250px;
   width: 100%;
   padding: 10px;
   margin: 8px 0;
