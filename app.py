@@ -68,7 +68,7 @@ app.config.update(
         'pool_size': 20,
         'max_overflow': 10,
         'connect_args': {
-            'ssl': {'ca': '/path/to/ssl-cert.pem'}  # RDS SSL certificate
+            'ssl': {'ca': '/etc/ssl/certs/rds-combined-ca-bundle.pem'}  # Common Linux location for RDS SSL certificate
         }
     }
 )
