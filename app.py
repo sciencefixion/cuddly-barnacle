@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import json
@@ -54,10 +55,12 @@ if not get_flask_secret() and not os.environ.get('FLASK_SECRET_KEY'):
 
 app.config.update(
     # Security settings
-    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(days=1),
+    SESSION_COOKIE_NAME='flask_app_session',  # Explicit name
+    SESSION_REFRESH_EACH_REQUEST=True,
     
     # Database settings
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -68,7 +71,7 @@ app.config.update(
         'pool_size': 20,
         'max_overflow': 10,
         'connect_args': {
-            'ssl': {'ca': '/path/to/ssl-cert.pem'}  # RDS SSL certificate
+            'ssl': {'ca': '/etc/ssl/certs/rds-combined-ca-bundle.pem'}  # Common Linux location for RDS SSL certificate
         }
     }
 )
@@ -128,6 +131,7 @@ except Exception as e:
     raise
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # ======================
 # AWS S3 Configuration
@@ -181,7 +185,10 @@ login_manager.session_protection = "strong"
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    user = User.query.get(int(user_id))
+    if not user:
+        app.logger.error(f"User {user_id} not found!")
+    return user
 
 # ======================
 # Application Routes
@@ -211,6 +218,9 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -223,6 +233,9 @@ def login():
         
         flash('Invalid username or password', 'error')
         app.logger.warning(f"Failed login attempt for: {username}")
+
+        next_page = request.args.get('next')
+        return redirect(next_page or url_for('home'))
     
     return render_template('login.html')
 
@@ -233,8 +246,10 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/')
+@app.route('/home')
 @login_required
 def home():
+    app.logger.info(f"Home accessed by: {current_user.id}")
     tasks = Task.query.filter_by(user_id=current_user.id).all()
     return render_template('index.html', tasks=tasks)
 
