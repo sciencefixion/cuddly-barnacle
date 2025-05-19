@@ -59,7 +59,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(days=1),
     SESSION_COOKIE_NAME='flask_app_session',  # Explicit name
-    SESSION_REFRESH_EACH_REQUEST=True
+    SESSION_REFRESH_EACH_REQUEST=True,
     
     # Database settings
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
