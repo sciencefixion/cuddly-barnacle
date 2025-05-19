@@ -216,6 +216,9 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -228,6 +231,9 @@ def login():
         
         flash('Invalid username or password', 'error')
         app.logger.warning(f"Failed login attempt for: {username}")
+
+        next_page = request.args.get('next')
+        return redirect(next_page or url_for('home'))
     
     return render_template('login.html')
 
@@ -237,6 +243,7 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@app.route('/')
 @app.route('/home')
 @login_required
 def home():
